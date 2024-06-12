@@ -8,7 +8,6 @@ import {
   streamUI,
   createStreamableValue
 } from 'ai/rsc'
-import { openai } from '@ai-sdk/openai'
 
 import {
   spinner,
@@ -35,6 +34,14 @@ import { saveChat } from '@/app/actions'
 import { SpinnerMessage, UserMessage } from '@/components/stocks/message'
 import { Chat, Message } from '@/lib/types'
 import { auth } from '@/auth'
+
+import { createOpenAI } from '@ai-sdk/openai'
+
+const openai = createOpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+  organization: process.env.OPENAI_ORG_ID,
+  project: process.env.OPENAI_PROJECT_ID
+})
 
 async function confirmPurchase(symbol: string, price: number, amount: number) {
   'use server'
@@ -127,7 +134,8 @@ async function submitUserMessage(content: string) {
   let textNode: undefined | React.ReactNode
 
   const result = await streamUI({
-    model: openai('gpt-3.5-turbo'),
+    model: openai('gpt-4o-2024-05-13'),
+    // model: openai('gpt-3.5-turbo'),
     initial: <SpinnerMessage />,
     system: `\
     You are a stock trading conversation bot and you can help users buy stocks, step by step.
@@ -475,6 +483,11 @@ async function submitUserMessage(content: string) {
         }
       }
     }
+    // temperature: 1,
+    // maxTokens: 256,
+    // topP: 1,
+    // frequencyPenalty: 0,
+    // presencePenalty: 0
   })
 
   return {
