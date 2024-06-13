@@ -34,7 +34,7 @@ export function ChatPanel({
   const { submitUserMessage } = useActions()
   const [shareDialogOpen, setShareDialogOpen] = React.useState(false)
 
-  const exampleMessages = [
+  /* const exampleMessages = [
     {
       heading: 'What are the',
       subheading: 'trending memecoins today?',
@@ -54,6 +54,23 @@ export function ChatPanel({
       heading: 'What are some',
       subheading: `recent events about $DOGE?`,
       message: `What are some recent events about $DOGE?`
+    }
+  ] */
+  const exampleMessages = [
+    {
+      heading: 'What are the',
+      subheading: 'symptoms of a heart attack?',
+      message: `What are the symptoms of a heart attack?`
+    },
+    {
+      heading: 'How can I',
+      subheading: 'lower my cholesterol levels?',
+      message: 'How can I lower my cholesterol levels?'
+    },
+    {
+      heading: 'What is the best',
+      subheading: 'diet for heart health?',
+      message: `What is the best diet for heart health?`
     }
   ]
 

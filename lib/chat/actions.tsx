@@ -36,6 +36,7 @@ import { Chat, Message } from '@/lib/types'
 import { auth } from '@/auth'
 
 import { createOpenAI } from '@ai-sdk/openai'
+import { RelatedQuestionsList } from '@/components/related-questions-list'
 
 const openai = createOpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -43,7 +44,7 @@ const openai = createOpenAI({
   project: process.env.OPENAI_PROJECT_ID
 })
 
-async function confirmPurchase(symbol: string, price: number, amount: number) {
+/* async function confirmPurchase(symbol: string, price: number, amount: number) {
   'use server'
 
   const aiState = getMutableAIState<typeof AI>()
@@ -111,7 +112,7 @@ async function confirmPurchase(symbol: string, price: number, amount: number) {
       display: systemMessage.value
     }
   }
-}
+} */
 
 async function submitUserMessage(content: string) {
   'use server'
@@ -133,11 +134,21 @@ async function submitUserMessage(content: string) {
   let textStream: undefined | ReturnType<typeof createStreamableValue<string>>
   let textNode: undefined | React.ReactNode
 
+  const systemMessage = `\
+      You are a cardiology Q&A bot that provides answers to patients' questions and suggests related questions. 
+      When a user asks a question, you provide an answer and a list of related questions. 
+      Use the following format:
+      - "[Answer]" for the answer to the user's question.
+      - "[Related Questions]" for the list of related questions.
+
+      If the related questions are not empty, call \`answerAndRelatedQuestionsTool\` to show the answer and the related question list. Otherwise, just provide the answer.
+      If the user requests more details or clarification, continue the conversation accordingly.`
+
   const result = await streamUI({
     model: openai('gpt-4o-2024-05-13'),
     // model: openai('gpt-3.5-turbo'),
     initial: <SpinnerMessage />,
-    system: `\
+    /* system: `\
     You are a stock trading conversation bot and you can help users buy stocks, step by step.
     You and the user can discuss stock prices and the user can adjust the amount of stocks they want to buy, or place an order, in the UI.
     
@@ -151,7 +162,7 @@ async function submitUserMessage(content: string) {
     If you want to show events, call \`get_events\`.
     If the user wants to sell stock, or complete another impossible task, respond that you are a demo and cannot do that.
     
-    Besides that, you can also chat with users and do some calculations if needed.`,
+    Besides that, you can also chat with users and do some calculations if needed.`, */
     messages: [
       ...aiState.get().messages.map((message: any) => ({
         role: message.role,
@@ -184,7 +195,78 @@ async function submitUserMessage(content: string) {
 
       return textNode
     },
+    system: systemMessage,
     tools: {
+      answerAndRelatedQuestionsTool: {
+        description: 'Generate answer and related questions.',
+        parameters: z.object({
+          answer: z.string(),
+          relatedQuestions: z.array(
+            z.object({
+              question: z.string().describe('The related question')
+            })
+          )
+        }),
+        generate: async function* ({ answer, relatedQuestions }) {
+          // Display a skeleton UI while generating the response
+          yield (
+            <BotCard>
+              <StocksSkeleton />{' '}
+              {/* Replace with your own skeleton component if you have one */}
+            </BotCard>
+          )
+
+          await sleep(1000)
+
+          const toolCallId = nanoid()
+
+          aiState.done({
+            ...aiState.get(),
+            messages: [
+              ...aiState.get().messages,
+              {
+                id: nanoid(),
+                role: 'assistant',
+                content: [
+                  {
+                    type: 'tool-call',
+                    toolName: 'answerAndRelatedQuestionsTool',
+                    toolCallId,
+                    args: { answer, relatedQuestions }
+                  }
+                ]
+              },
+              {
+                id: nanoid(),
+                role: 'tool',
+                content: [
+                  {
+                    type: 'tool-result',
+                    toolName: 'answerAndRelatedQuestionsTool',
+                    toolCallId,
+                    result: { answer, relatedQuestions }
+                  }
+                ]
+              }
+            ]
+          })
+
+          return (
+            <BotCard>
+              <div>
+                <p>{answer}</p>
+                <RelatedQuestionsList
+                  props={{
+                    relatedQuestions
+                  }}
+                />
+              </div>
+            </BotCard>
+          )
+        }
+      }
+    }
+    /* tools: {
       listStocks: {
         description: 'List three imaginary stocks that are trending.',
         parameters: z.object({
@@ -482,7 +564,7 @@ async function submitUserMessage(content: string) {
           )
         }
       }
-    }
+    } */
     // temperature: 1,
     // maxTokens: 256,
     // topP: 1,
@@ -508,8 +590,8 @@ export type UIState = {
 
 export const AI = createAI<AIState, UIState>({
   actions: {
-    submitUserMessage,
-    confirmPurchase
+    submitUserMessage
+    // confirmPurchase
   },
   initialUIState: [],
   initialAIState: { chatId: nanoid(), messages: [] },
@@ -568,26 +650,14 @@ export const getUIStateFromAIState = (aiState: Chat) => {
       display:
         message.role === 'tool' ? (
           message.content.map(tool => {
-            return tool.toolName === 'listStocks' ? (
+            return tool.toolName === 'answerAndRelatedQuestionsTool' ? (
               <BotCard>
-                {/* TODO: Infer types based on the tool result*/}
-                {/* @ts-expect-error */}
-                <Stocks props={tool.result} />
-              </BotCard>
-            ) : tool.toolName === 'showStockPrice' ? (
-              <BotCard>
-                {/* @ts-expect-error */}
-                <Stock props={tool.result} />
-              </BotCard>
-            ) : tool.toolName === 'showStockPurchase' ? (
-              <BotCard>
-                {/* @ts-expect-error */}
-                <Purchase props={tool.result} />
-              </BotCard>
-            ) : tool.toolName === 'getEvents' ? (
-              <BotCard>
-                {/* @ts-expect-error */}
-                <Events props={tool.result} />
+                <div>
+                  {/* @ts-expect-error */}
+                  <p>{tool.result.answer}</p>
+                  {/* @ts-expect-error */}
+                  <RelatedQuestionsList props={tool.result.relatedQuestions} />
+                </div>
               </BotCard>
             ) : null
           })
@@ -599,3 +669,43 @@ export const getUIStateFromAIState = (aiState: Chat) => {
         ) : null
     }))
 }
+
+// export const getUIStateFromAIState = (aiState: Chat) => {
+//   return aiState.messages
+//     .filter(message => message.role !== 'system')
+//     .map((message, index) => ({
+//       id: `${aiState.chatId}-${index}`,
+//       display:
+//         message.role === 'tool' ? (
+//           message.content.map(tool => {
+//             return tool.toolName === 'listStocks' ? (
+//               <BotCard>
+//                 {/* TODO: Infer types based on the tool result*/}
+//                 {/* @ts-expect-error */}
+//                 <Stocks props={tool.result} />
+//               </BotCard>
+//             ) : tool.toolName === 'showStockPrice' ? (
+//               <BotCard>
+//                 {/* @ts-expect-error */}
+//                 <Stock props={tool.result} />
+//               </BotCard>
+//             ) : tool.toolName === 'showStockPurchase' ? (
+//               <BotCard>
+//                 {/* @ts-expect-error */}
+//                 <Purchase props={tool.result} />
+//               </BotCard>
+//             ) : tool.toolName === 'getEvents' ? (
+//               <BotCard>
+//                 {/* @ts-expect-error */}
+//                 <Events props={tool.result} />
+//               </BotCard>
+//             ) : null
+//           })
+//         ) : message.role === 'user' ? (
+//           <UserMessage>{message.content as string}</UserMessage>
+//         ) : message.role === 'assistant' &&
+//           typeof message.content === 'string' ? (
+//           <BotMessage content={message.content} />
+//         ) : null
+//     }))
+// }
